@@ -1,0 +1,93 @@
+services:
+  # ==========================================
+  # Base de Datos Relacional (PostgreSQL)
+  # ==========================================
+  db:
+    image: postgres:16-alpine
+    container_name: sistema_experto_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-sistemas_expertos_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-sistemas_expertos_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sistema_experto_net
+
+  # ==========================================
+  # Backend API (Django REST Framework)
+  # ==========================================
+  back:
+    build:
+      context: ../SW_Sistema_experto_back
+      dockerfile: Dockerfile
+    container_name: sistema_experto_back
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DEBUG: ${DEBUG:-True}
+      SECRET_KEY: ${SECRET_KEY:-django-insecure-sprint1-expert-systems-secret-key-change-in-production}
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.development}
+      DB_ENGINE: django.db.backends.postgresql
+      DB_NAME: ${DB_NAME:-sistemas_expertos_db}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_HOST: db
+      DB_PORT: 5432
+      ALLOWED_HOSTS: "*"
+      CORS_ALLOW_ALL_ORIGINS: "True"
+      SEED_DATA: ${SEED_DATA:-true}
+      MAX_INFERENCE_ITERATIONS: ${MAX_INFERENCE_ITERATIONS:-100}
+    ports:
+      - "${BACK_PORT:-8000}:8000"
+    volumes:
+      - back_static:/app/staticfiles
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/sistemas-expertos/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - sistema_experto_net
+
+  # ==========================================
+  # Frontend Web (React + Vite + Nginx)
+  # ==========================================
+  front:
+    build:
+      context: ../SW_Sistema_experto_front
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+    container_name: sistema_experto_front
+    restart: unless-stopped
+    depends_on:
+      - back
+    ports:
+      - "${FRONT_PORT:-3000}:80"
+    networks:
+      - sistema_experto_net
+
+# ==========================================
+# Redes y Volúmenes Persistentes
+# ==========================================
+networks:
+  sistema_experto_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  back_static:
+    driver: local
