@@ -48,6 +48,7 @@ services:
       CORS_ALLOW_ALL_ORIGINS: "True"
       SEED_DATA: ${SEED_DATA:-true}
       MAX_INFERENCE_ITERATIONS: ${MAX_INFERENCE_ITERATIONS:-100}
+      STUDIO_SERVICE_KEY: ${STUDIO_SERVICE_KEY:-expertedu-studio-sso-dev-key}
     ports:
       - "${BACK_PORT:-8000}:8000"
     volumes:
