@@ -1,0 +1,73 @@
+name: CD (Deploy to EC2)
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+  repository_dispatch:
+    types:
+      - deploy-front
+      - deploy-back
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Componente a desplegar en EC2"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - front
+          - back
+          - despliegue
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Desplegar en EC2
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push') ||
+      github.event_name == 'repository_dispatch' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determinar objetivo de despliegue
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            case "${{ github.event.action }}" in
+              deploy-front) echo "value=front" >> "$GITHUB_OUTPUT" ;;
+              deploy-back)  echo "value=back" >> "$GITHUB_OUTPUT" ;;
+              *)            echo "value=all" >> "$GITHUB_OUTPUT" ;;
+            esac
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.target }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=despliegue" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ejecutar despliegue en EC2 por SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          script: |
+            set -e
+            APP_DIR="${{ secrets.EC2_APP_DIR }}"
+            if [ -z "$APP_DIR" ]; then
+              APP_DIR="$HOME/app"
+            fi
+
+            DEPLOY_DIR="$APP_DIR/SW_Sistema_experto_despliegue"
+            git -C "$DEPLOY_DIR" pull --ff-only origin main
+            bash "$DEPLOY_DIR/deploy.sh" "${{ steps.target.outputs.value }}"

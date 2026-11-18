@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validar despliegue (Compose & Script)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Validar sintaxis de deploy.sh
+        run: bash -n deploy.sh
+
+      - name: Validar docker-compose.yml
+        run: |
+          cp .env.example .env
+          docker compose config -q
